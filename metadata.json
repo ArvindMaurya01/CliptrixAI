@@ -1,0 +1,6 @@
+{
+  "name": "ClipTrix AI",
+  "description": "Aurora theme AI video-assessment platform with interactive carousel, advanced motion transitions, charts, and PDF report export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
