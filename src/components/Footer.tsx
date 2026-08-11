@@ -37,6 +37,19 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
             <li><a href="#categories" className="hover:text-white transition-colors">Categories</a></li>
             <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
+            <li>
+              <button 
+                onClick={() => {
+                  if (onNavigate) {
+                    onNavigate('community');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+                className="hover:text-[var(--accent-1)] font-semibold text-neutral-300 transition-colors text-left cursor-pointer flex items-center gap-1"
+              >
+                <span>Community</span>
+              </button>
+            </li>
           </ul>
         </div>
 

@@ -26,7 +26,10 @@ import { SecurityView } from './components/SecurityView';
 import { ContactView } from './components/ContactView';
 import { ReferralView } from './components/ReferralView';
 import { SharedStreakView } from './components/streak/SharedStreakView';
-import { StreakData } from './types';
+import { CommunityView } from './components/community/CommunityView';
+import { CommunityDetailView } from './components/community/CommunityDetailView';
+import { INITIAL_COMMUNITIES, INITIAL_POSTS, INITIAL_CHALLENGES, INITIAL_MEMBERSHIPS } from './data/communityData';
+import { StreakData, Community, CommunityPost, CommunityChallenge, CommunityMembership } from './types';
 
 const LoadingFallback = () => (
   <div className="flex items-center justify-center min-h-[350px] w-full">
@@ -53,6 +56,136 @@ export default function App() {
     lastActiveDate: null,
     milestones: [3, 7, 14, 30, 60, 100]
   });
+
+  // Community state
+  const [communities, setCommunities] = useState<Community[]>(INITIAL_COMMUNITIES);
+  const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>(INITIAL_POSTS);
+  const [communityChallenges, setCommunityChallenges] = useState<CommunityChallenge[]>(INITIAL_CHALLENGES);
+  const [communityMemberships, setCommunityMemberships] = useState<CommunityMembership[]>(INITIAL_MEMBERSHIPS);
+  const [selectedCommunityId, setSelectedCommunityId] = useState<string>('comm-1');
+
+  // Community handlers
+  const handleSelectCommunity = (communityId: string) => {
+    setSelectedCommunityId(communityId);
+    setCurrentView('community-detail');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleToggleJoinCommunity = (communityId: string) => {
+    setCommunities((prev) =>
+      prev.map((c) => {
+        if (c.id === communityId) {
+          const isCurrentlyJoined = c.isJoined;
+          const newJoined = !isCurrentlyJoined;
+          const newCount = newJoined ? c.memberCount + 1 : Math.max(0, c.memberCount - 1);
+          showToast(newJoined ? `Joined ${c.name}!` : `Left ${c.name}`, newJoined ? 'success' : 'info');
+          return {
+            ...c,
+            isJoined: newJoined,
+            joinStatus: newJoined ? 'active' : 'none',
+            memberCount: newCount
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  const handleCreateCommunity = (newComm: Partial<Community>) => {
+    const id = `comm-${Date.now()}`;
+    const fullCommunity: Community = {
+      id,
+      name: newComm.name || 'New Community',
+      description: newComm.description || '',
+      category: newComm.category || 'athlete',
+      sport: newComm.sport,
+      type: newComm.type || 'public',
+      imageUrl: newComm.imageUrl,
+      ownerId: user?.email || 'user-owner',
+      ownerName: user?.name || 'Community Leader',
+      memberCount: 1,
+      postCount: 0,
+      rules: newComm.rules,
+      createdAt: new Date().toISOString().split('T')[0],
+      isJoined: true,
+      joinStatus: 'active',
+      role: 'owner',
+      isFeatured: false
+    };
+
+    setCommunities((prev) => [fullCommunity, ...prev]);
+    setSelectedCommunityId(id);
+    setCurrentView('community-detail');
+  };
+
+  const handleCreatePost = (newPostData: Partial<CommunityPost>) => {
+    const newPost: CommunityPost = {
+      id: `post-${Date.now()}`,
+      communityId: newPostData.communityId || selectedCommunityId,
+      communityName: newPostData.communityName || 'Community',
+      authorId: user?.email || 'user-author',
+      authorName: user?.name || 'ClipTrixAI Member',
+      authorRole: user?.role || 'Athlete',
+      isVerified: true,
+      communityRole: 'member',
+      type: newPostData.type || 'discussion',
+      content: newPostData.content || '',
+      mediaUrl: newPostData.mediaUrl,
+      likeCount: 0,
+      commentCount: 0,
+      createdAt: 'Just now',
+      comments: []
+    };
+
+    setCommunityPosts((prev) => [newPost, ...prev]);
+    setCommunities((prev) =>
+      prev.map((c) => (c.id === newPost.communityId ? { ...c, postCount: c.postCount + 1 } : c))
+    );
+  };
+
+  const handleReactPost = (postId: string, reactionType: string) => {
+    setCommunityPosts((prev) =>
+      prev.map((p) => {
+        if (p.id === postId) {
+          const hasReacted = p.hasReacted;
+          const newLikeCount = hasReacted ? Math.max(0, p.likeCount - 1) : p.likeCount + 1;
+          return {
+            ...p,
+            hasReacted: !hasReacted,
+            likeCount: newLikeCount,
+            reactionType: hasReacted ? undefined : reactionType
+          };
+        }
+        return p;
+      })
+    );
+  };
+
+  const handleAddComment = (postId: string, content: string) => {
+    const newComment = {
+      id: `c-${Date.now()}`,
+      postId,
+      authorId: user?.email || 'user-commenter',
+      authorName: user?.name || 'ClipTrixAI Member',
+      content,
+      likeCount: 0,
+      createdAt: 'Just now'
+    };
+
+    setCommunityPosts((prev) =>
+      prev.map((p) => {
+        if (p.id === postId) {
+          const updatedComments = [...(p.comments || []), newComment];
+          return {
+            ...p,
+            comments: updatedComments,
+            commentCount: updatedComments.length
+          };
+        }
+        return p;
+      })
+    );
+  };
 
   // Theme effect on HTML root
   useEffect(() => {
@@ -341,6 +474,38 @@ export default function App() {
                 userName={user?.name || 'ClipTrixAI User'}
                 onNavigate={(v) => setCurrentView(v)}
                 onBack={() => setCurrentView(user ? 'dashboard' : 'landing')}
+              />
+            )}
+
+            {currentView === 'community' && (
+              <CommunityView
+                communities={communities}
+                posts={communityPosts}
+                challenges={communityChallenges}
+                user={user}
+                streakData={streakData}
+                onSelectCommunity={handleSelectCommunity}
+                onToggleJoinCommunity={handleToggleJoinCommunity}
+                onCreateCommunity={handleCreateCommunity}
+                onNavigate={(v) => setCurrentView(v)}
+                showToast={showToast}
+              />
+            )}
+
+            {currentView === 'community-detail' && (
+              <CommunityDetailView
+                community={communities.find((c) => c.id === selectedCommunityId) || communities[0]}
+                onBack={() => setCurrentView('community')}
+                user={user}
+                posts={communityPosts}
+                challenges={communityChallenges}
+                memberships={communityMemberships}
+                onToggleJoinCommunity={handleToggleJoinCommunity}
+                onCreatePost={handleCreatePost}
+                onReactPost={handleReactPost}
+                onAddComment={handleAddComment}
+                onNavigate={(v) => setCurrentView(v)}
+                showToast={showToast}
               />
             )}
           </Suspense>

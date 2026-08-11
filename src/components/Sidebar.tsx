@@ -1,6 +1,6 @@
 import React from 'react';
 import { ViewState } from '../types';
-import { LayoutDashboard, FileText, Settings as SettingsIcon, Sparkles, PlusCircle, Gift, Flame, Activity, ShieldCheck, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, FileText, Settings as SettingsIcon, Sparkles, PlusCircle, Gift, Flame, Activity, ShieldCheck, ChevronRight, Users } from 'lucide-react';
 
 interface SidebarProps {
   currentView: ViewState;
@@ -10,6 +10,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
   const navItems = [
     { key: 'dashboard' as ViewState, label: 'Dashboard', icon: LayoutDashboard },
+    { key: 'community' as ViewState, label: 'Community', icon: Users },
     { key: 'new-assessment' as ViewState, label: 'New Assessment', icon: PlusCircle, highlight: true },
     { key: 'report' as ViewState, label: 'Sample Report', icon: FileText },
     { key: 'referral' as ViewState, label: 'Refer & Earn', icon: Gift },

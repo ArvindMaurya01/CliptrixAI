@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ViewState, UserProfile } from '../types';
-import { Sun, Moon, User, Menu, X, LogOut, LayoutDashboard, Shield, Settings as SettingsIcon, Search } from 'lucide-react';
+import { Sun, Moon, User, Menu, X, LogOut, LayoutDashboard, Shield, Settings as SettingsIcon, Search, Users } from 'lucide-react';
 import { CliptrixLogo } from './CliptrixLogo';
 
 interface HeaderProps {
@@ -52,9 +52,9 @@ export const Header: React.FC<HeaderProps> = ({
           <CliptrixLogo showText={true} className="w-9 h-9 group-hover:scale-105 transition-transform" />
         </div>
 
-        {/* Search Bar */}
-        <div className="hidden md:flex flex-1 max-w-md mx-4">
-          <div className="relative w-full">
+        {/* Search Bar & Community Link */}
+        <div className="hidden md:flex flex-1 items-center gap-3 max-w-lg mx-4">
+          <div className="relative flex-1">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[var(--text-muted)]">
               <Search className="w-4 h-4" />
             </div>
@@ -66,6 +66,18 @@ export const Header: React.FC<HeaderProps> = ({
               className="w-full pl-10 pr-4 py-2.5 rounded-full bg-white dark:bg-neutral-900 border-2 border-neutral-300 dark:border-neutral-700 text-sm text-neutral-900 dark:text-white font-semibold placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:outline-none focus:border-[var(--accent-1)] focus:ring-2 focus:ring-[var(--accent-1)]/30 transition-all shadow-md"
             />
           </div>
+
+          <button
+            onClick={() => onNavigate('community')}
+            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-full text-xs font-bold transition-all cursor-pointer shrink-0 ${
+              currentView === 'community' || currentView === 'community-detail'
+                ? 'bg-[var(--accent-1)] text-white shadow-md'
+                : 'bg-neutral-200/80 dark:bg-neutral-800/80 text-[var(--text)] hover:bg-[var(--border-glass)] border border-neutral-300/40 dark:border-neutral-700/40'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Community</span>
+          </button>
         </div>
 
         {/* Right Actions */}
@@ -179,6 +191,16 @@ export const Header: React.FC<HeaderProps> = ({
               className="w-full pl-10 pr-4 py-2.5 rounded-full bg-white dark:bg-neutral-900 border-2 border-neutral-300 dark:border-neutral-700 text-sm text-neutral-900 dark:text-white font-semibold placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:outline-none focus:border-[var(--accent-1)] focus:ring-2 focus:ring-[var(--accent-1)]/30 shadow-md"
             />
           </div>
+
+          <button 
+            onClick={() => { 
+              onNavigate('community'); 
+              setMobileMenuOpen(false); 
+            }} 
+            className="w-full text-left py-2 px-3 rounded-xl bg-[var(--accent-1)]/15 text-[var(--accent-1)] text-xs font-bold shadow-sm flex items-center gap-2"
+          >
+            <Users className="w-4 h-4" /> Community
+          </button>
 
           {!user && (
             <div className="flex flex-col space-y-3 text-sm font-medium">

@@ -1,4 +1,87 @@
-export type ViewState = 'landing' | 'auth' | 'dashboard' | 'new-assessment' | 'report' | 'settings' | 'admin' | 'privacy' | 'terms' | 'security' | 'contact' | 'referral' | 'shared-streak';
+export type ViewState = 'landing' | 'auth' | 'dashboard' | 'new-assessment' | 'report' | 'settings' | 'admin' | 'privacy' | 'terms' | 'security' | 'contact' | 'referral' | 'shared-streak' | 'community' | 'community-detail';
+
+export type CommunityCategory = 'athlete' | 'student' | 'coach' | 'general';
+export type CommunityType = 'public' | 'private';
+export type CommunityRole = 'owner' | 'moderator' | 'member';
+export type CommunityPostType = 'discussion' | 'question' | 'tip' | 'achievement';
+
+export interface Community {
+  id: string;
+  name: string;
+  description: string;
+  category: CommunityCategory;
+  sport?: string;
+  type: CommunityType;
+  imageUrl?: string;
+  ownerId: string;
+  ownerName?: string;
+  memberCount: number;
+  postCount: number;
+  rules?: string;
+  createdAt: string;
+  isJoined?: boolean;
+  joinStatus?: 'active' | 'pending' | 'none';
+  role?: CommunityRole;
+  isFeatured?: boolean;
+}
+
+export interface CommunityComment {
+  id: string;
+  postId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar?: string;
+  content: string;
+  likeCount: number;
+  createdAt: string;
+  hasReacted?: boolean;
+}
+
+export interface CommunityPost {
+  id: string;
+  communityId: string;
+  communityName?: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar?: string;
+  authorRole?: string;
+  isVerified?: boolean;
+  communityRole?: CommunityRole;
+  type: CommunityPostType;
+  content: string;
+  mediaUrl?: string;
+  likeCount: number;
+  reactionType?: string;
+  commentCount: number;
+  hasReacted?: boolean;
+  isPinned?: boolean;
+  createdAt: string;
+  comments?: CommunityComment[];
+}
+
+export interface CommunityMembership {
+  id: string;
+  communityId: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  role: CommunityRole;
+  status: 'active' | 'pending' | 'banned';
+  joinedAt: string;
+}
+
+export interface CommunityChallenge {
+  id: string;
+  communityId?: string;
+  title: string;
+  description: string;
+  participantsCount: number;
+  userProgress: string;
+  isJoined: boolean;
+  reward: string;
+  daysTotal: number;
+  daysCompleted: number;
+}
 
 export interface StreakData {
   currentStreak: number;
