@@ -6,7 +6,16 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { ViewState, AssessmentReport, UserProfile, AssessmentCategoryKey } from './types';
 import { INITIAL_REPORTS } from './data/mockData';
-import { saveAssessmentReportSupabase, fetchAssessmentReportsSupabase } from './lib/supabase';
+import {
+  fetchUserReportsSupabase,
+  saveUserReportSupabase,
+  fetchUserStreakSupabase,
+  upsertUserStreakSupabase,
+  insertUserVideoSupabase,
+  insertUserAiAnalysisSupabase,
+  insertUserAssessmentSupabase,
+  upsertUserProfileSupabase
+} from './lib/supabase';
 import { AuroraBackground } from './components/AuroraBackground';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -40,6 +49,15 @@ const LoadingFallback = () => (
   </div>
 );
 
+// Helper to determine strictly isolated user ID
+export function getUserIdForProfile(email?: string): string {
+  if (!email) return 'guest';
+  const cleanEmail = email.trim().toLowerCase();
+  if (cleanEmail.includes('arvind')) return 'U001';
+  if (cleanEmail.includes('rahul')) return 'U002';
+  return cleanEmail;
+}
+
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewState>('landing');
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -60,9 +78,152 @@ export default function App() {
   // Community state
   const [communities, setCommunities] = useState<Community[]>(INITIAL_COMMUNITIES);
   const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>(INITIAL_POSTS);
-  const [communityChallenges, setCommunityChallenges] = useState<CommunityChallenge[]>(INITIAL_CHALLENGES);
-  const [communityMemberships, setCommunityMemberships] = useState<CommunityMembership[]>(INITIAL_MEMBERSHIPS);
+  const [communityChallenges] = useState<CommunityChallenge[]>(INITIAL_CHALLENGES);
+  const [communityMemberships] = useState<CommunityMembership[]>(INITIAL_MEMBERSHIPS);
   const [selectedCommunityId, setSelectedCommunityId] = useState<string>('comm-1');
+
+  // Load User Data with Database Isolation
+  useEffect(() => {
+    if (!user) {
+      setReports(INITIAL_REPORTS);
+      if (INITIAL_REPORTS[0]) setCurrentReport(INITIAL_REPORTS[0]);
+      return;
+    }
+
+    const userId = getUserIdForProfile(user.email);
+
+    async function loadIsolatedUserData() {
+      // Sync user profile to DB
+      upsertUserProfileSupabase({
+        id: userId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        theme: user.theme
+      });
+
+      // 1. Load User's Reports with strict user_id filtering
+      const userDbReports = await fetchUserReportsSupabase(userId);
+      if (userDbReports && userDbReports.length > 0) {
+        const mappedReports: AssessmentReport[] = userDbReports.map((r: any) => ({
+          id: r.id,
+          title: r.title || 'Untitled Assessment',
+          categoryKey: r.category_key || 'interview',
+          categoryName: r.category_name || 'Interview',
+          date: r.date || (r.created_at ? r.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+          duration: r.duration || '00:05',
+          overallScore: Number(r.overall_score) || 0,
+          scoreBand: r.score_band || 'good',
+          summary: r.summary || '',
+          attributes: Array.isArray(r.attributes) ? r.attributes : [],
+          timelineEvents: Array.isArray(r.timeline_events) ? r.timeline_events : [],
+          strengths: Array.isArray(r.strengths) ? r.strengths : [],
+          improvements: Array.isArray(r.weaknesses) ? r.weaknesses : Array.isArray(r.improvements) ? r.improvements : [],
+          actionPlan: Array.isArray(r.recommendations) ? r.recommendations : Array.isArray(r.action_plan) ? r.action_plan : [],
+          aiInsight: r.ai_insight || '',
+          videoFileName: r.video_file_name || 'video_sample.mp4'
+        }));
+        setReports(mappedReports);
+        setCurrentReport(mappedReports[0]);
+      } else {
+        // Check user-isolated local cache
+        const cacheKey = `cliptrix_reports_${userId}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            setReports(parsed);
+            if (parsed[0]) setCurrentReport(parsed[0]);
+          } catch {
+            setReports([]);
+            setCurrentReport(null);
+          }
+        } else if (userId === 'U001') {
+          // Default initial reports for Arvind (U001)
+          setReports(INITIAL_REPORTS);
+          if (INITIAL_REPORTS[0]) setCurrentReport(INITIAL_REPORTS[0]);
+        } else if (userId === 'U002') {
+          // Rahul's specific isolated initial reports
+          const rahulReport: AssessmentReport = {
+            id: 'rep-rahul-001',
+            title: 'Rahul Athlete Sprint & Bio-Analysis',
+            categoryKey: 'athlete',
+            categoryName: 'Athlete',
+            date: new Date().toISOString().split('T')[0],
+            duration: '00:15',
+            overallScore: 84,
+            scoreBand: 'good',
+            summary: 'Good stride power and explosive takeoff. Knee drive requires 5% angle tuning.',
+            attributes: [
+              { name: 'Stride Power', score: 88, status: 'optimal', observedValue: 'High explosive force', expertAnalysis: 'Solid ground contact time.' },
+              { name: 'Cadence Rate', score: 80, status: 'good', observedValue: '175 spm', expertAnalysis: 'Steady acceleration phase.' }
+            ],
+            timelineEvents: [
+              { timestamp: '00:02', title: 'Explosive Start', description: 'Fast force generation', type: 'positive' }
+            ],
+            strengths: ['Ground contact reactivity', 'Core stability'],
+            improvements: ['Increase hamstring mobility', 'Relax upper shoulders'],
+            actionPlan: ['High knee drills 3x weekly', 'Ankle stiffness hops'],
+            aiInsight: 'Strong athletic foundation with high velocity ceiling.',
+            videoFileName: 'rahul_sprint.mp4'
+          };
+          setReports([rahulReport]);
+          setCurrentReport(rahulReport);
+        } else {
+          // New registered user: clean empty state
+          setReports([]);
+          setCurrentReport(null);
+        }
+      }
+
+      // 2. Load User's Streak with strict user_id isolation
+      const dbStreak = await fetchUserStreakSupabase(userId);
+      if (dbStreak) {
+        setStreakData({
+          currentStreak: dbStreak.current_streak || 1,
+          longestStreak: dbStreak.longest_streak || 1,
+          totalAnalysisDays: dbStreak.total_analysis_days || 1,
+          weeklyActiveDays: Math.min(7, dbStreak.current_streak || 1),
+          lastActiveDate: dbStreak.last_active_date,
+          milestones: [3, 7, 14, 30, 60, 100]
+        });
+      } else {
+        const streakKey = `cliptrix_streak_${userId}`;
+        const cachedStreak = localStorage.getItem(streakKey);
+        if (cachedStreak) {
+          try {
+            setStreakData(JSON.parse(cachedStreak));
+          } catch {
+            setStreakData({ currentStreak: 0, longestStreak: 0, totalAnalysisDays: 0, weeklyActiveDays: 0, lastActiveDate: null, milestones: [3, 7, 14, 30, 60, 100] });
+          }
+        } else if (userId === 'U001') {
+          setStreakData({ currentStreak: 7, longestStreak: 12, totalAnalysisDays: 18, weeklyActiveDays: 5, lastActiveDate: new Date().toISOString().split('T')[0], milestones: [3, 7, 14, 30, 60, 100] });
+        } else if (userId === 'U002') {
+          setStreakData({ currentStreak: 3, longestStreak: 5, totalAnalysisDays: 6, weeklyActiveDays: 3, lastActiveDate: new Date().toISOString().split('T')[0], milestones: [3, 7, 14, 30, 60, 100] });
+        } else {
+          setStreakData({ currentStreak: 0, longestStreak: 0, totalAnalysisDays: 0, weeklyActiveDays: 0, lastActiveDate: null, milestones: [3, 7, 14, 30, 60, 100] });
+        }
+      }
+    }
+
+    loadIsolatedUserData();
+  }, [user]);
+
+  // Save state to user-scoped local cache whenever reports change
+  useEffect(() => {
+    if (user) {
+      const userId = getUserIdForProfile(user.email);
+      localStorage.setItem(`cliptrix_reports_${userId}`, JSON.stringify(reports));
+    }
+  }, [reports, user]);
+
+  // Save streak to user-scoped local cache whenever streakData changes
+  useEffect(() => {
+    if (user) {
+      const userId = getUserIdForProfile(user.email);
+      localStorage.setItem(`cliptrix_streak_${userId}`, JSON.stringify(streakData));
+    }
+  }, [streakData, user]);
 
   // Community handlers
   const handleSelectCommunity = (communityId: string) => {
@@ -92,6 +253,7 @@ export default function App() {
   };
 
   const handleCreateCommunity = (newComm: Partial<Community>) => {
+    const userId = getUserIdForProfile(user?.email);
     const id = `comm-${Date.now()}`;
     const fullCommunity: Community = {
       id,
@@ -101,7 +263,7 @@ export default function App() {
       sport: newComm.sport,
       type: newComm.type || 'public',
       imageUrl: newComm.imageUrl,
-      ownerId: user?.email || 'user-owner',
+      ownerId: userId,
       ownerName: user?.name || 'Community Leader',
       memberCount: 1,
       postCount: 0,
@@ -119,11 +281,12 @@ export default function App() {
   };
 
   const handleCreatePost = (newPostData: Partial<CommunityPost>) => {
+    const userId = getUserIdForProfile(user?.email);
     const newPost: CommunityPost = {
       id: `post-${Date.now()}`,
       communityId: newPostData.communityId || selectedCommunityId,
       communityName: newPostData.communityName || 'Community',
-      authorId: user?.email || 'user-author',
+      authorId: userId,
       authorName: user?.name || 'ClipTrixAI Member',
       authorRole: user?.role || 'Athlete',
       isVerified: true,
@@ -148,12 +311,11 @@ export default function App() {
       prev.map((p) => {
         if (p.id === postId) {
           const hasReacted = p.hasReacted;
-          const newLikeCount = hasReacted ? Math.max(0, p.likeCount - 1) : p.likeCount + 1;
           return {
             ...p,
             hasReacted: !hasReacted,
-            likeCount: newLikeCount,
-            reactionType: hasReacted ? undefined : reactionType
+            reactionType: !hasReacted ? reactionType : undefined,
+            likeCount: !hasReacted ? p.likeCount + 1 : Math.max(0, p.likeCount - 1)
           };
         }
         return p;
@@ -162,11 +324,13 @@ export default function App() {
   };
 
   const handleAddComment = (postId: string, content: string) => {
+    const userId = getUserIdForProfile(user?.email);
     const newComment = {
-      id: `c-${Date.now()}`,
+      id: `comment-${Date.now()}`,
       postId,
-      authorId: user?.email || 'user-commenter',
+      authorId: userId,
       authorName: user?.name || 'ClipTrixAI Member',
+      authorAvatar: user?.avatarUrl,
       content,
       likeCount: 0,
       createdAt: 'Just now'
@@ -196,44 +360,6 @@ export default function App() {
     }
   }, [user?.theme]);
 
-  // Load initial reports from Supabase if available
-  useEffect(() => {
-    async function loadSupabaseReports() {
-      const fetched = await fetchAssessmentReportsSupabase();
-      if (fetched && fetched.length > 0) {
-        const mappedReports: AssessmentReport[] = fetched.map((r: any) => ({
-          id: r.id,
-          title: r.title || 'Untitled Assessment',
-          categoryKey: r.category_key || 'interview',
-          categoryName: r.category_name || 'Interview',
-          date: r.date || (r.created_at ? r.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
-          duration: r.duration || '00:05',
-          overallScore: Number(r.overall_score) || 0,
-          scoreBand: r.score_band || 'needs-work',
-          summary: r.summary || '',
-          attributes: Array.isArray(r.attributes) ? r.attributes : [],
-          timelineEvents: Array.isArray(r.timeline_events) ? r.timeline_events : [],
-          strengths: Array.isArray(r.strengths) ? r.strengths : [],
-          improvements: Array.isArray(r.improvements) ? r.improvements : [],
-          actionPlan: Array.isArray(r.action_plan) ? r.action_plan : [],
-          aiInsight: r.ai_insight || '',
-          videoFileName: r.video_file_name || 'video_sample.mp4'
-        }));
-        
-        // Merge with initial mock reports avoiding duplicate IDs
-        setReports((prev) => {
-          const existingIds = new Set(mappedReports.map(m => m.id));
-          const unmappedInitial = prev.filter(p => !existingIds.has(p.id));
-          return [...mappedReports, ...unmappedInitial];
-        });
-        if (mappedReports[0]) {
-          setCurrentReport(mappedReports[0]);
-        }
-      }
-    }
-    loadSupabaseReports();
-  }, []);
-
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
     const id = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     setToasts((prev) => [...prev, { id, message, type }]);
@@ -245,7 +371,7 @@ export default function App() {
 
   const handleSuccessfulAuth = (name: string, email: string) => {
     const isAdmin = email.toLowerCase() === 'admin@cliptrix.ai' || email.toLowerCase().includes('admin');
-    setUser({
+    const newUserObj: UserProfile = {
       name,
       email,
       role: isAdmin ? 'System Administrator' : 'Enterprise Member',
@@ -257,13 +383,14 @@ export default function App() {
         reportReady: true,
         weeklyDigest: false
       }
-    });
+    };
+    setUser(newUserObj);
     if (isAdmin) {
       setCurrentView('admin');
       showToast('Welcome to ClipTrix Admin Panel', 'success');
     } else {
       setCurrentView('dashboard');
-      showToast(`Welcome back, ${name}!`, 'success');
+      showToast(`Welcome back, ${name}! Logged in securely.`, 'success');
     }
   };
 
@@ -290,7 +417,6 @@ export default function App() {
 
   const handleToggleTheme = () => {
     if (!user) {
-      // If not logged in, simulate light/dark toggle via temporary user state or root attribute
       const isCurrentlyLight = document.documentElement.getAttribute('data-theme') === 'light';
       if (isCurrentlyLight) {
         document.documentElement.removeAttribute('data-theme');
@@ -316,16 +442,19 @@ export default function App() {
   };
 
   const handleAssessmentComplete = async (newReport: AssessmentReport) => {
+    const userId = getUserIdForProfile(user?.email);
+
     setReports((prev) => [newReport, ...prev]);
     setCurrentReport(newReport);
     setCurrentView('report');
 
     // Update streak data on successful qualifying analysis
     const todayStr = new Date().toISOString().split('T')[0];
+    let updatedStreakData: StreakData = streakData;
+
     setStreakData((prev) => {
       const isSameDay = prev.lastActiveDate === todayStr;
       if (isSameDay) {
-        // Multiple analyses on same day count as 1 active day (rule 16)
         return prev;
       }
       const newStreak = prev.currentStreak + 1;
@@ -333,7 +462,7 @@ export default function App() {
       const newWeekly = Math.min(7, prev.weeklyActiveDays + 1);
       const newTotal = prev.totalAnalysisDays + 1;
 
-      return {
+      updatedStreakData = {
         ...prev,
         currentStreak: newStreak,
         longestStreak: newLongest,
@@ -341,16 +470,79 @@ export default function App() {
         totalAnalysisDays: newTotal,
         lastActiveDate: todayStr
       };
+      return updatedStreakData;
     });
 
     showToast('Assessment telemetry successfully computed! 🔥 Streak updated.', 'success');
 
-    // Asynchronously save to Supabase database
-    const result = await saveAssessmentReportSupabase(newReport);
-    if (result.success) {
+    // Asynchronously save to Supabase database with strict user isolation
+    const videoId = `vid-${Date.now()}`;
+    const analysisId = `ana-${Date.now()}`;
+
+    // 1. Create Video Record
+    await insertUserVideoSupabase({
+      id: videoId,
+      user_id: userId,
+      file_name: newReport.videoFileName || 'uploaded_video.mp4',
+      category: newReport.categoryKey,
+      duration: newReport.duration,
+      status: 'processed'
+    });
+
+    // 2. Create AI Analysis Record
+    await insertUserAiAnalysisSupabase({
+      id: analysisId,
+      user_id: userId,
+      video_id: videoId,
+      model_version: 'gemini-2.5-flash',
+      score: newReport.overallScore,
+      key_metrics: { attributes: newReport.attributes },
+      report: newReport.summary,
+      processing_status: 'completed'
+    });
+
+    // 3. Create Assessment Record
+    await insertUserAssessmentSupabase({
+      user_id: userId,
+      category: newReport.categoryKey,
+      score: newReport.overallScore,
+      result: { summary: newReport.summary, band: newReport.scoreBand }
+    });
+
+    // 4. Create Report Record
+    const reportSaveResult = await saveUserReportSupabase({
+      id: newReport.id,
+      user_id: userId,
+      analysis_id: analysisId,
+      title: newReport.title,
+      category_key: newReport.categoryKey,
+      category_name: newReport.categoryName,
+      overall_score: newReport.overallScore,
+      score_band: newReport.scoreBand,
+      summary: newReport.summary,
+      attributes: newReport.attributes,
+      timeline_events: newReport.timelineEvents,
+      strengths: newReport.strengths,
+      weaknesses: newReport.improvements,
+      recommendations: newReport.actionPlan,
+      category: newReport.categoryKey,
+      ai_insight: newReport.aiInsight,
+      video_file_name: newReport.videoFileName
+    });
+
+    // 5. Update Streak Record
+    await upsertUserStreakSupabase({
+      user_id: userId,
+      current_streak: updatedStreakData.currentStreak || 1,
+      longest_streak: updatedStreakData.longestStreak || 1,
+      total_analysis_days: updatedStreakData.totalAnalysisDays || 1,
+      last_active_date: todayStr
+    });
+
+    if (reportSaveResult.success) {
       showToast('Assessment saved to Supabase cloud database!', 'success');
-    } else if (result.error) {
-      console.warn('Supabase save notice:', result.error);
+    } else if (reportSaveResult.error) {
+      console.warn('Supabase save notice:', reportSaveResult.error);
     }
   };
 
@@ -518,4 +710,3 @@ export default function App() {
     </div>
   );
 }
-
